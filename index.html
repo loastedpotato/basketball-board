@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+ <link rel="manifest" href="manifest.json">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+ <meta name="apple-mobile-web-app-title" content="농구 전술판">
+ <link rel="apple-touch-icon" href="icon-192.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FIBA 규격 농구 전술판 (공 소유 및 패스 자동화)</title>
+  <script src="https://unpkg.com/konva@9.3.14/konva.min.js"></script>
+  <style>
+    body { margin: 0; padding: 20px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+    .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
+    .mode-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; border: 2px solid #333; border-radius: 6px; background-color: #fff; color: #333; cursor: pointer; transition: all 0.2s ease; }
+    .mode-btn.active { background-color: #333; color: #fff; }
+    .draw-tools { display: none; gap: 5px; padding-left: 10px; border-left: 2px dashed #ccc; }
+    .draw-tools.show { display: flex; }
+    .type-btn { padding: 6px 10px; font-size: 13px; border: 1px solid #666; border-radius: 4px; background-color: #fff; cursor: pointer; }
+    .type-btn.active { background-color: #666; color: #fff; }
+    .add-btn-home { border-color: #c0392b; color: #c0392b; }
+    .add-btn-home:hover { background-color: #e74c3c; color: white; }
+    .add-btn-away { border-color: #16a085; color: #2980b9; }
+    .add-btn-away:hover { background-color: #2980b9; color: white; }
+    .undo-btn { border-color: #f39c12; color: #e67e22; }
+    .undo-btn:hover { background-color: #f39c12; color: white; }
+    .anim-panel { background: #e8f8f5; border: 2px solid #1abc9c; }
+    .btn-frame { border-color: #1abc9c; color: #1abc9c; }
+    .btn-frame:hover { background-color: #1abc9c; color: white; }
+    .btn-play { border-color: #3498db; color: #3498db; }
+    .btn-play:hover { background-color: #3498db; color: white; }
+    .frame-counter { font-weight: bold; color: #1abc9c; align-self: center; margin-left: 5px; }
+    .btn-export { border-color: #d35400; color: #d35400; }
+    .btn-export:hover { background-color: #d35400; color: white; }
+    .btn-import { border-color: #e67e22; color: #e67e22; }
+    .btn-import:hover { background-color: #e67e22; color: white; }
+    .data-panel { background: #fdf2e9; border: 2px solid #e67e22; }
+    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; width: 100%; max-width: 900px; box-sizing: border-box; }
+    .header { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; margin-bottom: 15px; }
+    .header h2 { margin: 0; font-size: 20px; color: #333; }
+    .menu-btn { position: absolute; left: 0; padding: 6px 12px; }
+    #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; }
+    #control-panel.show { display: flex; }
+  
+    /* 플로팅 툴박스(FAB) 스타일 */
+    .floating-toolbox { position: fixed; top: 120px; left: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px; touch-action: none; }
+    .fab-main { width: 50px; height: 50px; border-radius: 50%; background-color: #34495e; color: white; font-size: 24px; border: none; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; user-select: none; transition: transform 0.1s; }
+    .fab-main:active { cursor: grabbing; transform: scale(0.95); }
+    .fab-menu { display: flex; gap: 8px; opacity: 0; transform: translateX(-20px); pointer-events: none; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+    .fab-menu.open { opacity: 1; transform: translateX(0); pointer-events: auto; }
+    .fab-item { width: 45px; height: 45px; border-radius: 50%; background-color: #fff; border: 2px solid #34495e; font-size: 20px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; justify-content: center; align-items: center; transition: all 0.2s; user-select: none; }
+    .fab-item.active { background-color: #34495e; color: white; border-color: #34495e; }
+    .fab-item:hover { transform: translateY(-2px); }
+
+    .board-wrapper { position: relative; width: 100%; max-width: 900px; box-sizing: border-box; margin: 0 auto; }
+    .overlay-play-btn { position: absolute; top: 15px; right: 15px; z-index: 10; font-size: 20px; background: rgba(255,255,255,0.9); border: 2px solid #3498db; color: #3498db; border-radius: 50%; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.1s; padding-left: 4px; }
+    .overlay-play-btn:active { transform: scale(0.95); }
+</style>
+</head>
+<body>
+  <!-- 플로팅 드로잉 툴박스 -->
+  <div id="floating-toolbox" class="floating-toolbox">
+    <div id="fab-main" class="fab-main" title="툴박스 이동/열기">👆</div>
+    <div id="fab-menu" class="fab-menu">
+      <div class="fab-item active" data-mode="move" data-type="move" title="이동">👆</div>
+      <div class="fab-item" data-mode="draw" data-type="solid" title="실선">〰️</div>
+      <div class="fab-item" data-mode="draw" data-type="pass" title="점선">┄</div>
+      <div class="fab-item" data-mode="draw" data-type="screen" title="T자">┳</div>
+      <div class="fab-item" data-mode="draw" data-type="dribble" title="지그재그">⚡</div>
+    </div>
+  </div>
+
+  <div class="header">
+    <button id="btn-menu" class="mode-btn menu-btn">☰ 메뉴</button>
+    <h2>농구 전술판</h2>
+  </div>
+
+  <div id="control-panel">
+    <div class="toolbar-group">
+      <button id="btn-half-court" class="mode-btn">🏀 하프 코트</button>
+      <button id="btn-grid" class="mode-btn">📏 가이드라인</button>
+      <!-- 그리기/이동 도구는 플로팅 툴박스로 분리되었습니다 -->
+      
+      <button id="btn-undo" class="mode-btn undo-btn">↩️ 선 지우기</button>
+    </div>
+
+    <div class="toolbar-group anim-panel">
+      <button id="btn-save-frame" class="mode-btn btn-frame">📸 프레임 캡처</button>
+      <button id="btn-play-anim" class="mode-btn btn-play">▶️ 작전 재생</button>
+      <button id="btn-clear-frames" class="mode-btn">🔄 프레임 초기화</button>
+      <span id="frame-counter" class="frame-counter">저장된 프레임: 0개</span>
+    </div>
+
+    <div class="toolbar-group data-panel">
+      <button id="btn-export" class="mode-btn btn-export">💾 전술 저장 (JSON)</button>
+      <button id="btn-import" class="mode-btn btn-import">📂 전술 불러오기</button>
+      <input type="file" id="file-input" accept=".json" style="display: none;" />
+    </div>
+  </div>
+  
+  <div class="board-wrapper">
+    <button id="btn-overlay-play" class="overlay-play-btn" title="작전 재생">▶️</button>
+    <div id="tactics-board"></div>
+  </div>
+
+  <script>
+    let currentMode = 'move'; 
+    let currentDrawType = 'move'; 
+    let allDraggables = []; 
+    let homeTeamCount = 0;
+    let awayTeamCount = 0;
+    const MAX_PLAYERS = 5;
+
+    let frames = []; 
+    let isPlaying = false;
+    let currentStepLines = []; 
+    
+    // ★ 공 소유 관련 변수 추가
+    let ballNode = null; 
+    let ballOwnerId = null;
+
+    const stage = new Konva.Stage({ container: 'tactics-board', width: 900, height: 510 });
+    const courtLayer = new Konva.Layer();
+    const drawingLayer = new Konva.Layer();
+    const playerLayer = new Konva.Layer();
+    
+    stage.add(courtLayer); stage.add(drawingLayer); stage.add(playerLayer);
+    let gridGroup; 
+
+    // --- 코트 그리기 ---
+    function drawFibaCourt(layer) {
+      const scale = 30, ox = 30, oy = 30, w = 28 * scale, h = 15 * scale;
+      const cx = ox + w / 2, cy = oy + h / 2; 
+
+      layer.add(new Konva.Rect({ x: 0, y: 0, width: 900, height: 510, fill: '#e4af79' }));
+      gridGroup = new Konva.Group({ visible: false });
+      for (let i = 0; i <= 28; i += 2) gridGroup.add(new Konva.Line({ points: [ox + i * scale, oy, ox + i * scale, oy + h], stroke: 'white', strokeWidth: 1, opacity: 0.3, dash: [4, 4] }));
+      for (let j = 0; j <= 15; j += 2) gridGroup.add(new Konva.Line({ points: [ox, oy + j * scale, ox + w, oy + j * scale], stroke: 'white', strokeWidth: 1, opacity: 0.3, dash: [4, 4] }));
+      layer.add(gridGroup);
+
+      layer.add(new Konva.Rect({ x: ox, y: oy, width: w, height: h, stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Line({ points: [cx, oy, cx, oy + h], stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Circle({ x: cx, y: cy, radius: 1.8 * scale, stroke: 'white', strokeWidth: 2 }));
+
+      const keyW = 5.8 * scale, keyH = 4.9 * scale; 
+      layer.add(new Konva.Rect({ x: ox, y: cy - keyH/2, width: keyW, height: keyH, stroke: 'white', strokeWidth: 2 })); 
+      layer.add(new Konva.Rect({ x: ox + w - keyW, y: cy - keyH/2, width: keyW, height: keyH, stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Circle({ x: ox + keyW, y: cy, radius: 1.8 * scale, stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Circle({ x: ox + w - keyW, y: cy, radius: 1.8 * scale, stroke: 'white', strokeWidth: 2 }));
+
+      const hoopDist = 1.575 * scale, backboardDist = 1.2 * scale, backboardW = 1.8 * scale; 
+      layer.add(new Konva.Line({ points: [ox + backboardDist, cy - backboardW/2, ox + backboardDist, cy + backboardW/2], stroke: 'white', strokeWidth: 4 }));
+      layer.add(new Konva.Circle({ x: ox + hoopDist, y: cy, radius: 0.225 * scale, stroke: '#e67e22', strokeWidth: 3 }));
+      layer.add(new Konva.Line({ points: [ox + w - backboardDist, cy - backboardW/2, ox + w - backboardDist, cy + backboardW/2], stroke: 'white', strokeWidth: 4 }));
+      layer.add(new Konva.Circle({ x: ox + w - hoopDist, y: cy, radius: 0.225 * scale, stroke: '#e67e22', strokeWidth: 3 }));
+
+      const threePtStraight = 0.9 * scale, threePtRadius = 6.75 * scale, straightEndX = ox + 89.7; 
+      layer.add(new Konva.Line({ points: [ox, oy + threePtStraight, straightEndX, oy + threePtStraight], stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Line({ points: [ox, oy + h - threePtStraight, straightEndX, oy + h - threePtStraight], stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Arc({ x: ox + hoopDist, y: cy, innerRadius: threePtRadius, outerRadius: threePtRadius, angle: 155.8, rotation: -77.9, stroke: 'white', strokeWidth: 2 }));
+
+      const straightEndXRight = ox + w - 89.7;
+      layer.add(new Konva.Line({ points: [ox + w, oy + threePtStraight, straightEndXRight, oy + threePtStraight], stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Line({ points: [ox + w, oy + h - threePtStraight, straightEndXRight, oy + h - threePtStraight], stroke: 'white', strokeWidth: 2 }));
+      layer.add(new Konva.Arc({ x: ox + w - hoopDist, y: cy, innerRadius: threePtRadius, outerRadius: threePtRadius, angle: 155.8, rotation: 102.1, stroke: 'white', strokeWidth: 2 }));
+    }
+    drawFibaCourt(courtLayer); courtLayer.draw();
+
+    // ★ 공 위치 업데이트 함수
+    function updateBallPosition(playerNode) {
+      if (!ballNode) return;
+      ballNode.x(playerNode.x() + 13);
+      ballNode.y(playerNode.y() + 13);
+    }
+
+    // --- 객체 생성 함수 ---
+    function createBasketball(x, y) {
+      const ballGroup = new Konva.Group({ id: 'ball', x: x, y: y, draggable: (currentMode === 'move') });
+      const ballCircle = new Konva.Circle({ radius: 10, fill: '#d35400', stroke: '#222', strokeWidth: 2, shadowColor: 'black', shadowBlur: 3, shadowOffset: { x: 2, y: 2 }, shadowOpacity: 0.4 });
+      const lineV = new Konva.Line({ points: [0, -10, 0, 10], stroke: '#222', strokeWidth: 1.5 });
+      const lineH = new Konva.Line({ points: [-10, 0, 10, 0], stroke: '#222', strokeWidth: 1.5 });
+      ballGroup.add(ballCircle); ballGroup.add(lineV); ballGroup.add(lineH);
+      ballGroup.on('mouseenter', () => { if(currentMode === 'move' && !isPlaying) stage.container().style.cursor = 'pointer'; });
+      ballGroup.on('mouseleave', () => { stage.container().style.cursor = 'default'; });
+      
+      // ★ 공 드래그 로직 (플레이어에게 스냅)
+      ballGroup.on('dragstart', () => {
+        ballOwnerId = null; // 드래그 시작 시 소유 해제
+      });
+      ballGroup.on('dragend', () => {
+        let minDistance = 40; // 스냅 반경
+        let closestPlayer = null;
+        allDraggables.forEach(obj => {
+          if (obj.id() !== 'ball') {
+            const dist = Math.hypot(obj.x() - ballGroup.x(), obj.y() - ballGroup.y());
+            if (dist < minDistance) { minDistance = dist; closestPlayer = obj; }
+          }
+        });
+        if (closestPlayer) {
+          ballOwnerId = closestPlayer.id();
+          updateBallPosition(closestPlayer);
+          playerLayer.draw();
+        }
+      });
+
+      allDraggables.push(ballGroup); 
+      ballNode = ballGroup; // 전역 참조 저장
+      return ballGroup;
+    }
+    playerLayer.add(createBasketball(450, 255));
+
+    function createPlayer(x, y, label, color, id) {
+      const playerGroup = new Konva.Group({ id: id, x: x, y: y, draggable: (currentMode === 'move') });
+      const playerCircle = new Konva.Circle({ radius: 15, fill: color, stroke: '#222', strokeWidth: 2, shadowColor: 'black', shadowBlur: 3, shadowOffset: { x: 2, y: 2 }, shadowOpacity: 0.3 });
+      const playerText = new Konva.Text({ text: label, fontSize: 14, fontFamily: 'Arial', fontStyle: 'bold', fill: 'white', x: -15, y: -6, width: 30, align: 'center' });
+      playerGroup.add(playerCircle); playerGroup.add(playerText);
+      playerGroup.on('mouseenter', () => { if(currentMode === 'move' && !isPlaying) stage.container().style.cursor = 'pointer'; });
+      playerGroup.on('mouseleave', () => { stage.container().style.cursor = 'default'; });
+      
+      // ★ 플레이어 드래그 시 공도 같이 이동
+      playerGroup.on('dragmove', function() {
+        if (ballOwnerId === this.id()) {
+          updateBallPosition(this);
+        }
+      });
+
+      allDraggables.push(playerGroup); return playerGroup;
+    }
+
+    // ★ 메뉴 버튼 토글 로직
+    document.getElementById('btn-menu').addEventListener('click', () => {
+      const panel = document.getElementById('control-panel');
+      const btn = document.getElementById('btn-menu');
+      panel.classList.toggle('show');
+      if (panel.classList.contains('show')) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    // ★ 초기 로드 시 양 팀 5명 기본 배치
+    for (let i = 1; i <= MAX_PLAYERS; i++) {
+      homeTeamCount++;
+      playerLayer.add(createPlayer(50 + (homeTeamCount * 45), 485, homeTeamCount.toString(), '#e74c3c', 'home_' + homeTeamCount)); 
+    }
+    for (let i = 1; i <= MAX_PLAYERS; i++) {
+      awayTeamCount++;
+      playerLayer.add(createPlayer(850 - (awayTeamCount * 45), 485, 'X' + awayTeamCount, '#2980b9', 'away_' + awayTeamCount)); 
+    }
+    playerLayer.draw();
+
+    // --- 애니메이션 로직 고도화 ---
+    const counterText = document.getElementById('frame-counter');
+    
+    function captureFrame() {
+      const frameState = { lines: currentStepLines };
+      allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
+      frames.push(frameState);
+      currentStepLines = []; 
+      counterText.innerText = `저장된 프레임: ${frames.length}개`;
+      
+      const flash = new Konva.Rect({ x: 0, y: 0, width: stage.width() / stage.scaleX(), height: stage.height() / stage.scaleY(), fill: 'white', opacity: 0.5 });
+      courtLayer.add(flash); courtLayer.draw();
+      setTimeout(() => { flash.destroy(); courtLayer.draw(); }, 100);
+    }
+    document.getElementById('btn-save-frame').addEventListener('click', captureFrame);
+
+    document.getElementById('btn-clear-frames').addEventListener('click', () => {
+      frames = []; currentStepLines = []; counterText.innerText = `저장된 프레임: 0개`;
+      drawingLayer.destroyChildren(); drawingLayer.draw();
+    });
+
+    async function playAnimation() {
+      if (frames.length < 2) return alert('재생하려면 최소 2개 이상의 프레임(장면)을 캡처해야 합니다.');
+      if (isPlaying) return;
+      
+      isPlaying = true;
+      currentStepLines = []; 
+      allDraggables.forEach(obj => obj.draggable(false));
+      drawingLayer.destroyChildren(); drawingLayer.draw();
+
+      const firstFrame = frames[0];
+      allDraggables.forEach(obj => {
+        if(firstFrame[obj.id()]) { obj.x(firstFrame[obj.id()].x); obj.y(firstFrame[obj.id()].y); }
+      });
+      playerLayer.draw();
+
+      await new Promise(r => setTimeout(r, 600));
+
+      for (let i = 1; i < frames.length; i++) {
+        const nextFrame = frames[i];
+        const promises = [];
+        
+        allDraggables.forEach(obj => {
+          const targetPos = nextFrame[obj.id()];
+          if (targetPos) {
+            promises.push(new Promise(resolve => {
+              new Konva.Tween({
+                node: obj, duration: 1.2, x: targetPos.x, y: targetPos.y,
+                easing: Konva.Easings.EaseInOut, onFinish: () => resolve()
+              }).play();
+            }));
+          }
+        });
+
+        if (nextFrame.lines && nextFrame.lines.length > 0) {
+          nextFrame.lines.forEach(lineData => {
+            promises.push(new Promise(resolve => {
+              const group = new Konva.Group();
+              const mainLine = new Konva.Line({
+                stroke: lineData.stroke, strokeWidth: 4, lineCap: 'round', lineJoin: 'round',
+                tension: lineData.tension, dash: lineData.dash, points: [] 
+              });
+              group.add(mainLine); drawingLayer.add(group);
+
+              let tBar = null;
+              if (lineData.type === 'screen' && lineData.tBarPoints) {
+                tBar = new Konva.Line({ stroke: lineData.stroke, strokeWidth: 4, lineCap: 'round', points: lineData.tBarPoints, opacity: 0 });
+                group.add(tBar);
+              }
+
+              const fullPoints = lineData.points;
+              const totalPairs = Math.floor(fullPoints.length / 2);
+
+              const anim = new Konva.Animation((frame) => {
+                let progress = frame.time / 1200; 
+                if (progress > 1) progress = 1;
+                const currentPairs = Math.max(1, Math.floor(progress * totalPairs));
+                mainLine.points(fullPoints.slice(0, currentPairs * 2));
+                if (progress === 1) {
+                  if (tBar) { tBar.opacity(1); drawingLayer.draw(); }
+                  anim.stop(); resolve();
+                }
+              }, drawingLayer);
+              anim.start();
+            }));
+          });
+        }
+        await Promise.all(promises); 
+        await new Promise(r => setTimeout(r, 300)); 
+      }
+
+      isPlaying = false;
+      if (currentMode === 'move') allDraggables.forEach(obj => obj.draggable(true));
+      alert('작전 재생이 완료되었습니다.');
+    }
+    document.getElementById('btn-play-anim').addEventListener('click', playAnimation);
+    document.getElementById('btn-overlay-play').addEventListener('click', playAnimation);
+
+
+    let isHalfCourt = false;
+    document.getElementById('btn-half-court').addEventListener('click', (e) => {
+      isHalfCourt = !isHalfCourt;
+      if (isHalfCourt) { e.target.innerText = '🏀 풀 코트'; e.target.classList.add('active'); } 
+      else { e.target.innerText = '🏀 하프 코트'; e.target.classList.remove('active'); }
+      resizeCanvas(); 
+    });
+
+    document.getElementById('btn-grid').addEventListener('click', (e) => {
+      const isVisible = gridGroup.visible(); gridGroup.visible(!isVisible);
+      if (!isVisible) { e.target.innerText = '📏 가이드 끄기'; e.target.classList.add('active'); } 
+      else { e.target.innerText = '📏 가이드라인'; e.target.classList.remove('active'); }
+      courtLayer.draw();
+    });
+
+    // ★ 플로팅 툴박스(FAB) 로직 (드래그 & 토글)
+    const toolbox = document.getElementById('floating-toolbox');
+    const fabMain = document.getElementById('fab-main');
+    const fabMenu = document.getElementById('fab-menu');
+    const fabItems = document.querySelectorAll('.fab-item');
+
+    let isDraggingFab = false;
+    let fabStartX, fabStartY, initialFabX, initialFabY;
+
+    function onFabDragStart(e) {
+      if (e.target.closest('.fab-menu')) return; 
+      isDraggingFab = false;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      fabStartX = clientX;
+      fabStartY = clientY;
+      
+      const rect = toolbox.getBoundingClientRect();
+      initialFabX = rect.left;
+      initialFabY = rect.top;
+
+      document.addEventListener('mousemove', onFabDragMove);
+      document.addEventListener('mouseup', onFabDragEnd);
+      document.addEventListener('touchmove', onFabDragMove, {passive: false});
+      document.addEventListener('touchend', onFabDragEnd);
+    }
+
+    function onFabDragMove(e) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      const dx = clientX - fabStartX;
+      const dy = clientY - fabStartY;
+      
+      // 약간의 움직임(5px)이 있으면 드래그로 판정
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        isDraggingFab = true;
+      }
+
+      if (isDraggingFab) {
+        e.preventDefault(); // 스크롤 방지
+        toolbox.style.left = `${initialFabX + dx}px`;
+        toolbox.style.top = `${initialFabY + dy}px`;
+      }
+    }
+
+    function onFabDragEnd(e) {
+      document.removeEventListener('mousemove', onFabDragMove);
+      document.removeEventListener('mouseup', onFabDragEnd);
+      document.removeEventListener('touchmove', onFabDragMove);
+      document.removeEventListener('touchend', onFabDragEnd);
+      
+      if (!isDraggingFab) {
+        // 드래그가 아니면 클릭(메뉴 토글)으로 간주
+        fabMenu.classList.toggle('open');
+      }
+    }
+
+    // 마우스 및 터치 이벤트 바인딩
+    fabMain.addEventListener('mousedown', onFabDragStart);
+    fabMain.addEventListener('touchstart', onFabDragStart, {passive: false});
+
+    // 아이콘 클릭 시 기능 전환
+    fabItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        fabItems.forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        
+        const mode = e.currentTarget.getAttribute('data-mode');
+        const type = e.currentTarget.getAttribute('data-type');
+        
+        if (mode === 'move') {
+          currentMode = 'move';
+          if (!isPlaying) allDraggables.forEach(obj => obj.draggable(true));
+        } else {
+          currentMode = 'draw';
+          currentDrawType = type;
+          allDraggables.forEach(obj => obj.draggable(false));
+        }
+        
+        // 메인 토글 아이콘을 현재 선택한 아이콘으로 변경
+        fabMain.innerText = e.currentTarget.innerText; 
+        
+        // 선택 후 메뉴창 닫기
+        fabMenu.classList.remove('open'); 
+      });
+    });
+
+    document.getElementById('btn-undo').addEventListener('click', () => {
+      const groups = drawingLayer.getChildren();
+      if (groups.length > 0) { groups[groups.length - 1].destroy(); drawingLayer.draw(); currentStepLines.pop(); }
+    });
+
+    function getZigzagPoints(rawPoints, step, amplitude) {
+      if (rawPoints.length < 4) return rawPoints; 
+      let zPoints = [rawPoints[0], rawPoints[1]]; 
+      let distanceAcc = 0, sign = 1; 
+      for (let i = 0; i < rawPoints.length - 2; i += 2) {
+        let x1 = rawPoints[i], y1 = rawPoints[i+1], x2 = rawPoints[i+2], y2 = rawPoints[i+3];
+        let dx = x2 - x1, dy = y2 - y1, segLen = Math.sqrt(dx * dx + dy * dy); 
+        let dirX = dx / segLen, dirY = dy / segLen, walked = 0;
+        while (distanceAcc + segLen - walked >= step) {
+          let toNext = step - distanceAcc; walked += toNext;
+          let px = x1 + dirX * walked, py = y1 + dirY * walked;
+          zPoints.push(px - dirY * amplitude * sign, py + dirX * amplitude * sign);
+          sign *= -1; distanceAcc = 0; 
+        }
+        distanceAcc += (segLen - walked);
+      }
+      zPoints.push(rawPoints[rawPoints.length - 2], rawPoints[rawPoints.length - 1]);
+      return zPoints;
+    }
+
+    let isDrawing = false, currentGroup, currentLine, rawPath = [];
+    let isThreeFingerTouched = false;
+    stage.on('mousedown touchstart', (e) => {
+      // 세 손가락 터치 프레임 캡처
+      if (e.evt.touches && e.evt.touches.length === 3) {
+        if (!isThreeFingerTouched) {
+          isThreeFingerTouched = true;
+          captureFrame();
+        }
+        return;
+      }
+      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 터치 시 그리기 무시
+      if (currentMode !== 'draw' || isPlaying) return; 
+      isDrawing = true; const pos = stage.getRelativePointerPosition();
+      currentGroup = new Konva.Group(); drawingLayer.add(currentGroup);
+      let lineConfig = { stroke: 'black', strokeWidth: 4, lineCap: 'round', lineJoin: 'round', tension: 0.5, points: [pos.x, pos.y] };
+      rawPath = [pos.x, pos.y]; 
+      if (currentDrawType === 'pass') { lineConfig.dash = [12, 10]; lineConfig.stroke = '#3498db'; } 
+      else if (currentDrawType === 'screen') { lineConfig.stroke = '#27ae60'; } 
+      else if (currentDrawType === 'dribble') { lineConfig.stroke = '#8e44ad'; lineConfig.tension = 0; }
+      currentLine = new Konva.Line(lineConfig); currentGroup.add(currentLine);
+    });
+
+    stage.on('mousemove touchmove', (e) => {
+      if (!isDrawing) return; 
+      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 터치 시 무시
+      e.evt.preventDefault();
+      const pos = stage.getRelativePointerPosition();
+      if (currentDrawType === 'dribble') {
+        rawPath.push(pos.x, pos.y); currentLine.points(getZigzagPoints(rawPath, 15, 8));
+      } else {
+        currentLine.points(currentLine.points().concat([pos.x, pos.y]));
+      }
+      drawingLayer.batchDraw(); 
+    });
+
+    stage.on('mouseup touchend', () => {
+      if (!isDrawing) return;
+      
+      const pts = currentLine.points();
+      let lineData = { type: currentDrawType, points: pts, stroke: currentLine.stroke(), dash: currentLine.dash(), tension: currentLine.tension() };
+
+      if (currentDrawType === 'screen' && pts.length >= 4) {
+        const endX = pts[pts.length - 2], endY = pts[pts.length - 1];
+        let prevX = endX, prevY = endY;
+        for (let i = pts.length - 4; i >= 0; i -= 2) {
+          const dx = endX - pts[i], dy = endY - pts[i + 1];
+          if (Math.sqrt(dx*dx + dy*dy) > 5) { prevX = pts[i]; prevY = pts[i + 1]; break; }
+        }
+        const angle = Math.atan2(endY - prevY, endX - prevX);
+        const barLength = 12; 
+        
+        lineData.tBarPoints = [ endX + barLength * Math.cos(angle - Math.PI/2), endY + barLength * Math.sin(angle - Math.PI/2), endX + barLength * Math.cos(angle + Math.PI/2), endY + barLength * Math.sin(angle + Math.PI/2) ];
+        const tBar = new Konva.Line({ points: lineData.tBarPoints, stroke: currentLine.stroke(), strokeWidth: 4, lineCap: 'round' });
+        currentGroup.add(tBar); drawingLayer.draw();
+      }
+      
+      // ★ 점선(패스) 자동 이동 로직
+      if (currentDrawType === 'pass' && pts.length >= 4) {
+        const startX = pts[0], startY = pts[1];
+        const endX = pts[pts.length - 2], endY = pts[pts.length - 1];
+        
+        // 시작점이 공 근처인지 확인
+        if (Math.hypot(startX - ballNode.x(), startY - ballNode.y()) < 50) {
+          let minDistance = 50, targetPlayer = null;
+          
+          // 끝점이 플레이어 근처인지 확인
+          allDraggables.forEach(obj => {
+            if (obj.id() !== 'ball') {
+              if (Math.hypot(endX - obj.x(), endY - obj.y()) < minDistance) {
+                minDistance = Math.hypot(endX - obj.x(), endY - obj.y());
+                targetPlayer = obj;
+              }
+            }
+          });
+          
+          // 타겟 플레이어가 있으면 공을 전달
+          if (targetPlayer) {
+            ballOwnerId = targetPlayer.id();
+            // 자연스럽게 휙 날아가는 애니메이션
+            new Konva.Tween({
+              node: ballNode,
+              duration: 0.3, // 0.3초만에 빠르게 이동
+              x: targetPlayer.x() + 13,
+              y: targetPlayer.y() + 13,
+              easing: Konva.Easings.EaseOut,
+              onUpdate: () => playerLayer.batchDraw()
+            }).play();
+          }
+        }
+      }
+      
+      currentStepLines.push(lineData);
+
+      // ★ 추가: 실선, T자, 지그재그선 그리기 시 플레이어 자동 이동 로직
+      const moveTypes = ['solid', 'screen', 'dribble'];
+      if (moveTypes.includes(currentDrawType) && pts.length >= 4) {
+        const startX = pts[0];
+        const startY = pts[1];
+        
+        // 1. 시작점 근처의 플레이어 찾기
+        let startingPlayer = null;
+        let minPlayerDist = 40; // 감지 반경
+
+        allDraggables.forEach(obj => {
+          if (obj.id() !== 'ball') { // 공은 플레이어가 아님
+            const dist = Math.hypot(startX - obj.x(), startY - obj.y());
+            if (dist < minPlayerDist) { minPlayerDist = dist; startingPlayer = obj; }
+          }
+        });
+
+        // 2. 플레이어가 발견되면 선을 따라 이동 애니메이션 실행
+        if (startingPlayer) {
+          // 이동 시간 (필요에 따라 조절 가능)
+          const playerTweenDuration = 1.0; 
+
+          // 선의 전체 길이 및 각 구간(segment) 정보 계산
+          let totalLength = 0;
+          const segments = [];
+          for (let i = 0; i < pts.length - 2; i += 2) {
+            const dx = pts[i+2] - pts[i];
+            const dy = pts[i+3] - pts[i+1];
+            const len = Math.hypot(dx, dy);
+            segments.push({
+              x1: pts[i], y1: pts[i+1],
+              x2: pts[i+2], y2: pts[i+3],
+              length: len,
+              accum: totalLength
+            });
+            totalLength += len;
+          }
+
+          if (totalLength > 0) {
+            // 플레이어 이동 경로 애니메이션 (Konva.Animation 활용)
+            const anim = new Konva.Animation((frame) => {
+              let progress = frame.time / (playerTweenDuration * 1000); 
+              if (progress > 1) progress = 1;
+
+              const targetLen = progress * totalLength;
+              let currX = pts[pts.length - 2];
+              let currY = pts[pts.length - 1];
+
+              // 현재 진행률(progress)에 맞는 궤적 위의 정확한 좌표(x, y) 찾기
+              for (let i = 0; i < segments.length; i++) {
+                const seg = segments[i];
+                if (targetLen >= seg.accum && targetLen <= seg.accum + seg.length) {
+                  const segProgress = seg.length === 0 ? 0 : (targetLen - seg.accum) / seg.length;
+                  currX = seg.x1 + (seg.x2 - seg.x1) * segProgress;
+                  currY = seg.y1 + (seg.y2 - seg.y1) * segProgress;
+                  break;
+                }
+              }
+
+              // 플레이어 및 공 위치 업데이트
+              startingPlayer.x(currX);
+              startingPlayer.y(currY);
+
+              if (ballOwnerId === startingPlayer.id()) {
+                updateBallPosition(startingPlayer);
+              }
+
+              if (progress === 1) {
+                anim.stop();
+              }
+            }, playerLayer);
+
+            anim.start();
+          }
+        }
+      }
+
+      isDrawing = false; currentLine = null; currentGroup = null; rawPath = [];
+    });
+
+    // --- 데이터 영속성 (JSON 내보내기 / 불러오기) ---
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (frames.length === 0) {
+        if (!confirm('캡처된 프레임이 없습니다. 현재 상태만 저장하시겠습니까?')) return;
+        // 현재 상태를 첫 번째 프레임으로 저장
+        const frameState = { lines: currentStepLines };
+        allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
+        frames.push(frameState);
+        currentStepLines = [];
+        counterText.innerText = `저장된 프레임: ${frames.length}개`;
+      }
+      
+      const exportData = {
+        homeTeamCount,
+        awayTeamCount,
+        frames
+      };
+      
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", "basketball_tactics.json");
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    });
+
+    document.getElementById('btn-import').addEventListener('click', () => {
+      document.getElementById('file-input').click();
+    });
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          
+          // 기존 객체 초기화
+          playerLayer.destroyChildren();
+          drawingLayer.destroyChildren();
+          allDraggables = [];
+          homeTeamCount = 0;
+          awayTeamCount = 0;
+          ballNode = null;
+          ballOwnerId = null;
+          currentStepLines = [];
+          
+          // 공 재생성
+          playerLayer.add(createBasketball(450, 255));
+          
+          // 플레이어 재생성
+          for(let i=1; i <= importedData.homeTeamCount; i++) {
+            homeTeamCount++;
+            playerLayer.add(createPlayer(50 + (i * 45), 485, i.toString(), '#e74c3c', 'home_' + i));
+          }
+          for(let i=1; i <= importedData.awayTeamCount; i++) {
+            awayTeamCount++;
+            playerLayer.add(createPlayer(850 - (i * 45), 485, 'X' + i, '#2980b9', 'away_' + i));
+          }
+
+          // 프레임 복구
+          frames = importedData.frames || [];
+          counterText.innerText = `저장된 프레임: ${frames.length}개`;
+          
+          // 첫 번째 프레임으로 상태 복구
+          if (frames.length > 0) {
+            const firstFrame = frames[0];
+            allDraggables.forEach(obj => {
+              if (firstFrame[obj.id()]) {
+                obj.x(firstFrame[obj.id()].x);
+                obj.y(firstFrame[obj.id()].y);
+              }
+            });
+          }
+          
+          playerLayer.draw();
+          drawingLayer.draw();
+          alert('전술 데이터를 성공적으로 불러왔습니다!');
+        } catch (err) {
+          alert('잘못된 파일 형식이거나 불러오기에 실패했습니다.');
+        }
+        document.getElementById('file-input').value = ""; // input 초기화
+      };
+      reader.readAsText(file);
+    });
+
+    
+    // --- ★ 두 손가락 줌(Zoom) & 팬(Pan) 로직 ---
+    function getDistance(p1, p2) {
+      return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    }
+    function getCenter(p1, p2) {
+      return {
+        x: (p1.x + p2.x) / 2,
+        y: (p1.y + p2.y) / 2,
+      };
+    }
+    
+    let lastCenter = null;
+    let lastDist = 0;
+
+    stage.on('touchmove', function (e) {
+      const touch1 = e.evt.touches ? e.evt.touches[0] : null;
+      const touch2 = e.evt.touches ? e.evt.touches[1] : null;
+
+      if (touch1 && touch2) {
+        e.evt.preventDefault(); // 기본 스크롤 방지
+        
+        // 그리기 중이었다면 취소
+        if (isDrawing) {
+          isDrawing = false;
+          if (currentLine) currentLine.destroy();
+          currentGroup = null;
+          currentLine = null;
+          rawPath = [];
+          drawingLayer.draw();
+        }
+
+        const rect = stage.container().getBoundingClientRect();
+        const p1 = { x: touch1.clientX - rect.left, y: touch1.clientY - rect.top };
+        const p2 = { x: touch2.clientX - rect.left, y: touch2.clientY - rect.top };
+
+        if (!lastCenter) {
+          lastCenter = getCenter(p1, p2);
+          return;
+        }
+        
+        const newCenter = getCenter(p1, p2);
+        const dist = getDistance(p1, p2);
+
+        if (!lastDist) {
+          lastDist = dist;
+        }
+
+        // 확대/축소 기준점 계산
+        const pointTo = {
+          x: (newCenter.x - stage.x()) / stage.scaleX(),
+          y: (newCenter.y - stage.y()) / stage.scaleX(),
+        };
+
+        // 스케일 계산
+        let scale = stage.scaleX() * (dist / lastDist);
+        // 과도한 축소/확대 제한
+        if (scale < 0.3) scale = 0.3;
+        if (scale > 5) scale = 5;
+
+        stage.scaleX(scale);
+        stage.scaleY(scale);
+
+        // 이동(팬) 거리 계산
+        const dx = newCenter.x - lastCenter.x;
+        const dy = newCenter.y - lastCenter.y;
+
+        // 새로운 위치 적용
+        const newPos = {
+          x: newCenter.x - pointTo.x * scale + dx,
+          y: newCenter.y - pointTo.y * scale + dy,
+        };
+
+        stage.position(newPos);
+        stage.batchDraw();
+
+        lastDist = dist;
+        lastCenter = newCenter;
+      }
+    });
+
+    stage.on('touchend', function (e) {
+      if (!e.evt.touches || e.evt.touches.length < 3) {
+        isThreeFingerTouched = false;
+      }
+      lastDist = 0;
+      lastCenter = null;
+    });
+
+    const VIRTUAL_WIDTH = 900;
+    const VIRTUAL_HEIGHT = 510;
+    const HALF_COURT_WIDTH = 460; 
+
+    function resizeCanvas() {
+      const container = document.getElementById('tactics-board');
+      const containerWidth = container.offsetWidth; 
+      const currentVirtualWidth = isHalfCourt ? HALF_COURT_WIDTH : VIRTUAL_WIDTH;
+      let scale = containerWidth / currentVirtualWidth;
+      if (!isHalfCourt && scale > 1) { scale = 1; }
+
+      stage.width(currentVirtualWidth * scale);
+      stage.height(VIRTUAL_HEIGHT * scale);
+      stage.scale({ x: scale, y: scale });
+      stage.position({ x: 0, y: 0 });
+      stage.batchDraw();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+  </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js');
+    });
+  }
+</script>
+</body>
+</html>
