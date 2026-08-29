@@ -115,6 +115,9 @@
     let frames = []; 
     let isPlaying = false;
     let currentStepLines = []; 
+    let currentFrameIndex = -1; // 현재 보고 있는 프레임 위치
+    let threeFingerTapCount = 0; // 세 손가락 터치 횟수
+    let threeFingerTapTimer = null; // 다중 터치 타이머
     
     // ★ 공 소유 관련 변수 추가
     let ballNode = null; 
@@ -255,20 +258,71 @@
     const counterText = document.getElementById('frame-counter');
     
     function captureFrame() {
-      const frameState = { lines: currentStepLines };
+      // 과거 프레임에서 새로 캡처 시 이후 프레임 덮어쓰기
+      if (currentFrameIndex < frames.length - 1) {
+        frames = frames.slice(0, currentFrameIndex + 1);
+      }
+      
+      const frameState = { lines: [...currentStepLines] };
       allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
       frames.push(frameState);
+      
+      currentFrameIndex = frames.length - 1; // 인덱스 업데이트
       currentStepLines = []; 
-      counterText.innerText = `저장된 프레임: ${frames.length}개`;
+      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
       
       const flash = new Konva.Rect({ x: 0, y: 0, width: stage.width() / stage.scaleX(), height: stage.height() / stage.scaleY(), fill: 'white', opacity: 0.5 });
       courtLayer.add(flash); courtLayer.draw();
       setTimeout(() => { flash.destroy(); courtLayer.draw(); }, 100);
     }
+
+    // ★ 특정 프레임으로 화면을 되돌리는 함수
+    function loadFrame(index) {
+      if (index < 0 || index >= frames.length) return;
+      currentFrameIndex = index;
+      const frame = frames[index];
+      
+      allDraggables.forEach(obj => {
+        if (frame[obj.id()]) { obj.x(frame[obj.id()].x); obj.y(frame[obj.id()].y); }
+      });
+      playerLayer.draw();
+
+      drawingLayer.destroyChildren();
+      currentStepLines = frame.lines ? [...frame.lines] : [];
+      
+      currentStepLines.forEach(lineData => {
+        const group = new Konva.Group();
+        const mainLine = new Konva.Line({
+          stroke: lineData.stroke, strokeWidth: 4, lineCap: 'round', lineJoin: 'round',
+          tension: lineData.tension, dash: lineData.dash, points: lineData.points
+        });
+        group.add(mainLine);
+        if (lineData.type === 'screen' && lineData.tBarPoints) {
+          const tBar = new Konva.Line({ stroke: lineData.stroke, strokeWidth: 4, lineCap: 'round', points: lineData.tBarPoints });
+          group.add(tBar);
+        }
+        drawingLayer.add(group);
+      });
+      drawingLayer.draw();
+      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+    }
+
+    function goToPreviousFrame() {
+      if (frames.length === 0 || currentFrameIndex <= 0) return;
+      loadFrame(currentFrameIndex - 1);
+    }
+
+    function goToNextFrame() {
+      if (frames.length === 0 || currentFrameIndex >= frames.length - 1) return;
+      loadFrame(currentFrameIndex + 1);
+    }
+
     document.getElementById('btn-save-frame').addEventListener('click', captureFrame);
 
     document.getElementById('btn-clear-frames').addEventListener('click', () => {
-      frames = []; currentStepLines = []; counterText.innerText = `저장된 프레임: 0개`;
+      frames = []; currentStepLines = []; 
+      currentFrameIndex = -1;
+      counterText.innerText = `저장된 프레임: 0개`;
       drawingLayer.destroyChildren(); drawingLayer.draw();
     });
 
@@ -344,6 +398,11 @@
 
       isPlaying = false;
       if (currentMode === 'move') allDraggables.forEach(obj => obj.draggable(true));
+      
+      // 애니메이션 재생 후 마지막 프레임으로 상태 복구
+      currentFrameIndex = frames.length - 1;
+      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+      
       alert('작전 재생이 완료되었습니다.');
     }
     document.getElementById('btn-play-anim').addEventListener('click', playAnimation);
@@ -481,15 +540,31 @@
     let isDrawing = false, currentGroup, currentLine, rawPath = [];
     let isThreeFingerTouched = false;
     stage.on('mousedown touchstart', (e) => {
-      // 세 손가락 터치 프레임 캡처
+      // 세 손가락 다중 터치 제스처 처리
       if (e.evt.touches && e.evt.touches.length === 3) {
+        e.evt.preventDefault();
+        
         if (!isThreeFingerTouched) {
           isThreeFingerTouched = true;
-          captureFrame();
+          threeFingerTapCount++;
+          
+          if (threeFingerTapTimer) clearTimeout(threeFingerTapTimer);
+          
+          threeFingerTapTimer = setTimeout(() => {
+            if (threeFingerTapCount === 1) {
+              captureFrame(); // 1번 터치: 기존처럼 캡처
+            } else if (threeFingerTapCount === 2) {
+              goToPreviousFrame(); // 2번 터치: 이전 프레임 이동 (Undo)
+            } else if (threeFingerTapCount >= 3) {
+              goToNextFrame(); // 3번 이상 터치: 다음 프레임 이동 (Redo)
+            }
+            threeFingerTapCount = 0; // 카운트 초기화
+          }, 400); // 0.4초 대기하며 터치 횟수 판단
         }
         return;
       }
-      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 터치 시 그리기 무시
+      
+      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 무시
       if (currentMode !== 'draw' || isPlaying) return; 
       isDrawing = true; const pos = stage.getRelativePointerPosition();
       currentGroup = new Konva.Group(); drawingLayer.add(currentGroup);
@@ -583,7 +658,7 @@
         let minPlayerDist = 40; // 감지 반경
 
         allDraggables.forEach(obj => {
-          if (obj.id() !== 'ball') { // 공은 플레이어가 아님
+          if (obj.id() !== 'ball') { // 공은 플레이어가 아닙
             const dist = Math.hypot(startX - obj.x(), startY - obj.y());
             if (dist < minPlayerDist) { minPlayerDist = dist; startingPlayer = obj; }
           }
@@ -661,6 +736,7 @@
         allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
         frames.push(frameState);
         currentStepLines = [];
+        currentFrameIndex = 0;
         counterText.innerText = `저장된 프레임: ${frames.length}개`;
       }
       
@@ -717,10 +793,11 @@
 
           // 프레임 복구
           frames = importedData.frames || [];
-          counterText.innerText = `저장된 프레임: ${frames.length}개`;
           
           // 첫 번째 프레임으로 상태 복구
           if (frames.length > 0) {
+            currentFrameIndex = 0;
+            counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
             const firstFrame = frames[0];
             allDraggables.forEach(obj => {
               if (firstFrame[obj.id()]) {
@@ -728,6 +805,9 @@
                 obj.y(firstFrame[obj.id()].y);
               }
             });
+          } else {
+            currentFrameIndex = -1;
+            counterText.innerText = `저장된 프레임: 0개`;
           }
           
           playerLayer.draw();
