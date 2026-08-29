@@ -59,7 +59,6 @@
 </style>
 </head>
 <body>
-  <!-- 플로팅 드로잉 툴박스 -->
   <div id="floating-toolbox" class="floating-toolbox">
     <div id="fab-main" class="fab-main" title="툴박스 이동/열기">👆</div>
     <div id="fab-menu" class="fab-menu">
@@ -80,7 +79,6 @@
     <div class="toolbar-group">
       <button id="btn-half-court" class="mode-btn">🏀 하프 코트</button>
       <button id="btn-grid" class="mode-btn">📏 가이드라인</button>
-      
       <button id="btn-undo" class="mode-btn undo-btn">↩️ 선 지우기</button>
     </div>
 
@@ -116,11 +114,12 @@
     let currentStepLines = []; 
     let currentFrameIndex = -1;
     
-    // ★ 두 손가락 제스처 관련 변수
+    // ★ 멀티 터치 제스처 관련 변수
     let isTwoFingerTouched = false; 
     let twoFingerTapCount = 0; 
     let twoFingerTapTimer = null;
-    let isPanningOrZooming = false; // 줌/팬 동작 중인지 확인하는 플래그
+    let isPanningOrZooming = false; 
+    let isThreeFingerTouched = false; // 세 손가락 감지 플래그 복구
     
     let ballNode = null; 
     let ballOwnerId = null;
@@ -523,7 +522,24 @@
     let isDrawing = false, currentGroup, currentLine, rawPath = [];
     
     stage.on('mousedown touchstart', (e) => {
-      // ★ 두 손가락 다중 터치 제스처 처리
+      // ★ 세 손가락 터치 프레임 캡처 (복구됨)
+      if (e.evt.touches && e.evt.touches.length === 3) {
+        e.evt.preventDefault();
+        
+        // 만약 두 손가락 타이머가 작동 중이었다면 오작동 방지를 위해 초기화
+        if (twoFingerTapTimer) {
+          clearTimeout(twoFingerTapTimer);
+          twoFingerTapCount = 0;
+        }
+
+        if (!isThreeFingerTouched) {
+          isThreeFingerTouched = true;
+          captureFrame();
+        }
+        return;
+      }
+
+      // ★ 두 손가락 다중 터치 제스처 처리 (이전/다음 프레임 이동)
       if (e.evt.touches && e.evt.touches.length === 2) {
         e.evt.preventDefault();
         
@@ -534,16 +550,15 @@
           if (twoFingerTapTimer) clearTimeout(twoFingerTapTimer);
           
           twoFingerTapTimer = setTimeout(() => {
-            // 확대/축소(팬/줌) 중이 아닐 때만 터치 제스처 작동
             if (!isPanningOrZooming) {
               if (twoFingerTapCount === 2) {
-                goToPreviousFrame(); // 2번 터치: 이전 프레임 이동
+                goToPreviousFrame(); 
               } else if (twoFingerTapCount >= 3) {
-                goToNextFrame(); // 3번 터치: 다음 프레임 이동
+                goToNextFrame(); 
               }
             }
-            twoFingerTapCount = 0; // 카운트 초기화
-          }, 400); // 0.4초 대기하며 터치 횟수 판단
+            twoFingerTapCount = 0; 
+          }, 400); 
         }
         return;
       }
@@ -562,7 +577,7 @@
 
     stage.on('mousemove touchmove', (e) => {
       if (!isDrawing) return; 
-      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 터치 시 무시
+      if (e.evt.touches && e.evt.touches.length > 1) return; // 다중 터치 시 무시
       e.evt.preventDefault();
       const pos = stage.getRelativePointerPosition();
       if (currentDrawType === 'dribble') {
@@ -805,7 +820,7 @@
       if (touch1 && touch2) {
         e.evt.preventDefault(); 
         
-        isPanningOrZooming = true; // ★ 줌/팬 동작 활성화 감지
+        isPanningOrZooming = true; 
 
         if (isDrawing) {
           isDrawing = false;
@@ -861,10 +876,12 @@
     });
 
     stage.on('touchend', function (e) {
-      // ★ 터치가 종료되면 상태 초기화
+      // ★ 터치 종료 시 상태 복구
+      if (!e.evt.touches || e.evt.touches.length < 3) {
+        isThreeFingerTouched = false;
+      }
       if (!e.evt.touches || e.evt.touches.length < 2) {
         isTwoFingerTouched = false;
-        // 줌/팬 플래그를 아주 짧은 시간 뒤에 해제하여 터치오작동 방지
         setTimeout(() => { isPanningOrZooming = false; }, 100);
       }
       lastDist = 0;
