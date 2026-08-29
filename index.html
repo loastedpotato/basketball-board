@@ -80,7 +80,6 @@
     <div class="toolbar-group">
       <button id="btn-half-court" class="mode-btn">🏀 하프 코트</button>
       <button id="btn-grid" class="mode-btn">📏 가이드라인</button>
-      <!-- 그리기/이동 도구는 플로팅 툴박스로 분리되었습니다 -->
       
       <button id="btn-undo" class="mode-btn undo-btn">↩️ 선 지우기</button>
     </div>
@@ -115,11 +114,14 @@
     let frames = []; 
     let isPlaying = false;
     let currentStepLines = []; 
-    let currentFrameIndex = -1; // 현재 보고 있는 프레임 위치
-    let threeFingerTapCount = 0; // 세 손가락 터치 횟수
-    let threeFingerTapTimer = null; // 다중 터치 타이머
+    let currentFrameIndex = -1;
     
-    // ★ 공 소유 관련 변수 추가
+    // ★ 두 손가락 제스처 관련 변수
+    let isTwoFingerTouched = false; 
+    let twoFingerTapCount = 0; 
+    let twoFingerTapTimer = null;
+    let isPanningOrZooming = false; // 줌/팬 동작 중인지 확인하는 플래그
+    
     let ballNode = null; 
     let ballOwnerId = null;
 
@@ -131,7 +133,6 @@
     stage.add(courtLayer); stage.add(drawingLayer); stage.add(playerLayer);
     let gridGroup; 
 
-    // --- 코트 그리기 ---
     function drawFibaCourt(layer) {
       const scale = 30, ox = 30, oy = 30, w = 28 * scale, h = 15 * scale;
       const cx = ox + w / 2, cy = oy + h / 2; 
@@ -170,14 +171,12 @@
     }
     drawFibaCourt(courtLayer); courtLayer.draw();
 
-    // ★ 공 위치 업데이트 함수
     function updateBallPosition(playerNode) {
       if (!ballNode) return;
       ballNode.x(playerNode.x() + 13);
       ballNode.y(playerNode.y() + 13);
     }
 
-    // --- 객체 생성 함수 ---
     function createBasketball(x, y) {
       const ballGroup = new Konva.Group({ id: 'ball', x: x, y: y, draggable: (currentMode === 'move') });
       const ballCircle = new Konva.Circle({ radius: 10, fill: '#d35400', stroke: '#222', strokeWidth: 2, shadowColor: 'black', shadowBlur: 3, shadowOffset: { x: 2, y: 2 }, shadowOpacity: 0.4 });
@@ -187,12 +186,11 @@
       ballGroup.on('mouseenter', () => { if(currentMode === 'move' && !isPlaying) stage.container().style.cursor = 'pointer'; });
       ballGroup.on('mouseleave', () => { stage.container().style.cursor = 'default'; });
       
-      // ★ 공 드래그 로직 (플레이어에게 스냅)
       ballGroup.on('dragstart', () => {
-        ballOwnerId = null; // 드래그 시작 시 소유 해제
+        ballOwnerId = null;
       });
       ballGroup.on('dragend', () => {
-        let minDistance = 40; // 스냅 반경
+        let minDistance = 40;
         let closestPlayer = null;
         allDraggables.forEach(obj => {
           if (obj.id() !== 'ball') {
@@ -208,7 +206,7 @@
       });
 
       allDraggables.push(ballGroup); 
-      ballNode = ballGroup; // 전역 참조 저장
+      ballNode = ballGroup; 
       return ballGroup;
     }
     playerLayer.add(createBasketball(450, 255));
@@ -221,7 +219,6 @@
       playerGroup.on('mouseenter', () => { if(currentMode === 'move' && !isPlaying) stage.container().style.cursor = 'pointer'; });
       playerGroup.on('mouseleave', () => { stage.container().style.cursor = 'default'; });
       
-      // ★ 플레이어 드래그 시 공도 같이 이동
       playerGroup.on('dragmove', function() {
         if (ballOwnerId === this.id()) {
           updateBallPosition(this);
@@ -231,7 +228,6 @@
       allDraggables.push(playerGroup); return playerGroup;
     }
 
-    // ★ 메뉴 버튼 토글 로직
     document.getElementById('btn-menu').addEventListener('click', () => {
       const panel = document.getElementById('control-panel');
       const btn = document.getElementById('btn-menu');
@@ -243,7 +239,6 @@
       }
     });
 
-    // ★ 초기 로드 시 양 팀 5명 기본 배치
     for (let i = 1; i <= MAX_PLAYERS; i++) {
       homeTeamCount++;
       playerLayer.add(createPlayer(50 + (homeTeamCount * 45), 485, homeTeamCount.toString(), '#e74c3c', 'home_' + homeTeamCount)); 
@@ -254,11 +249,9 @@
     }
     playerLayer.draw();
 
-    // --- 애니메이션 로직 고도화 ---
     const counterText = document.getElementById('frame-counter');
     
     function captureFrame() {
-      // 과거 프레임에서 새로 캡처 시 이후 프레임 덮어쓰기
       if (currentFrameIndex < frames.length - 1) {
         frames = frames.slice(0, currentFrameIndex + 1);
       }
@@ -267,7 +260,7 @@
       allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
       frames.push(frameState);
       
-      currentFrameIndex = frames.length - 1; // 인덱스 업데이트
+      currentFrameIndex = frames.length - 1;
       currentStepLines = []; 
       counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
       
@@ -276,7 +269,6 @@
       setTimeout(() => { flash.destroy(); courtLayer.draw(); }, 100);
     }
 
-    // ★ 특정 프레임으로 화면을 되돌리는 함수
     function loadFrame(index) {
       if (index < 0 || index >= frames.length) return;
       currentFrameIndex = index;
@@ -399,7 +391,6 @@
       isPlaying = false;
       if (currentMode === 'move') allDraggables.forEach(obj => obj.draggable(true));
       
-      // 애니메이션 재생 후 마지막 프레임으로 상태 복구
       currentFrameIndex = frames.length - 1;
       counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
       
@@ -424,7 +415,6 @@
       courtLayer.draw();
     });
 
-    // ★ 플로팅 툴박스(FAB) 로직 (드래그 & 토글)
     const toolbox = document.getElementById('floating-toolbox');
     const fabMain = document.getElementById('fab-main');
     const fabMenu = document.getElementById('fab-menu');
@@ -458,13 +448,12 @@
       const dx = clientX - fabStartX;
       const dy = clientY - fabStartY;
       
-      // 약간의 움직임(5px)이 있으면 드래그로 판정
       if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
         isDraggingFab = true;
       }
 
       if (isDraggingFab) {
-        e.preventDefault(); // 스크롤 방지
+        e.preventDefault(); 
         toolbox.style.left = `${initialFabX + dx}px`;
         toolbox.style.top = `${initialFabY + dy}px`;
       }
@@ -477,16 +466,13 @@
       document.removeEventListener('touchend', onFabDragEnd);
       
       if (!isDraggingFab) {
-        // 드래그가 아니면 클릭(메뉴 토글)으로 간주
         fabMenu.classList.toggle('open');
       }
     }
 
-    // 마우스 및 터치 이벤트 바인딩
     fabMain.addEventListener('mousedown', onFabDragStart);
     fabMain.addEventListener('touchstart', onFabDragStart, {passive: false});
 
-    // 아이콘 클릭 시 기능 전환
     fabItems.forEach(item => {
       item.addEventListener('click', (e) => {
         fabItems.forEach(b => b.classList.remove('active'));
@@ -504,10 +490,7 @@
           allDraggables.forEach(obj => obj.draggable(false));
         }
         
-        // 메인 토글 아이콘을 현재 선택한 아이콘으로 변경
         fabMain.innerText = e.currentTarget.innerText; 
-        
-        // 선택 후 메뉴창 닫기
         fabMenu.classList.remove('open'); 
       });
     });
@@ -538,33 +521,34 @@
     }
 
     let isDrawing = false, currentGroup, currentLine, rawPath = [];
-    let isThreeFingerTouched = false;
+    
     stage.on('mousedown touchstart', (e) => {
-      // 세 손가락 다중 터치 제스처 처리
-      if (e.evt.touches && e.evt.touches.length === 3) {
+      // ★ 두 손가락 다중 터치 제스처 처리
+      if (e.evt.touches && e.evt.touches.length === 2) {
         e.evt.preventDefault();
         
-        if (!isThreeFingerTouched) {
-          isThreeFingerTouched = true;
-          threeFingerTapCount++;
+        if (!isTwoFingerTouched) {
+          isTwoFingerTouched = true;
+          twoFingerTapCount++;
           
-          if (threeFingerTapTimer) clearTimeout(threeFingerTapTimer);
+          if (twoFingerTapTimer) clearTimeout(twoFingerTapTimer);
           
-          threeFingerTapTimer = setTimeout(() => {
-            if (threeFingerTapCount === 1) {
-              captureFrame(); // 1번 터치: 기존처럼 캡처
-            } else if (threeFingerTapCount === 2) {
-              goToPreviousFrame(); // 2번 터치: 이전 프레임 이동 (Undo)
-            } else if (threeFingerTapCount >= 3) {
-              goToNextFrame(); // 3번 이상 터치: 다음 프레임 이동 (Redo)
+          twoFingerTapTimer = setTimeout(() => {
+            // 확대/축소(팬/줌) 중이 아닐 때만 터치 제스처 작동
+            if (!isPanningOrZooming) {
+              if (twoFingerTapCount === 2) {
+                goToPreviousFrame(); // 2번 터치: 이전 프레임 이동
+              } else if (twoFingerTapCount >= 3) {
+                goToNextFrame(); // 3번 터치: 다음 프레임 이동
+              }
             }
-            threeFingerTapCount = 0; // 카운트 초기화
+            twoFingerTapCount = 0; // 카운트 초기화
           }, 400); // 0.4초 대기하며 터치 횟수 판단
         }
         return;
       }
       
-      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 무시
+      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 이상 그리기 무시
       if (currentMode !== 'draw' || isPlaying) return; 
       isDrawing = true; const pos = stage.getRelativePointerPosition();
       currentGroup = new Konva.Group(); drawingLayer.add(currentGroup);
@@ -610,16 +594,13 @@
         currentGroup.add(tBar); drawingLayer.draw();
       }
       
-      // ★ 점선(패스) 자동 이동 로직
       if (currentDrawType === 'pass' && pts.length >= 4) {
         const startX = pts[0], startY = pts[1];
         const endX = pts[pts.length - 2], endY = pts[pts.length - 1];
         
-        // 시작점이 공 근처인지 확인
         if (Math.hypot(startX - ballNode.x(), startY - ballNode.y()) < 50) {
           let minDistance = 50, targetPlayer = null;
           
-          // 끝점이 플레이어 근처인지 확인
           allDraggables.forEach(obj => {
             if (obj.id() !== 'ball') {
               if (Math.hypot(endX - obj.x(), endY - obj.y()) < minDistance) {
@@ -629,13 +610,11 @@
             }
           });
           
-          // 타겟 플레이어가 있으면 공을 전달
           if (targetPlayer) {
             ballOwnerId = targetPlayer.id();
-            // 자연스럽게 휙 날아가는 애니메이션
             new Konva.Tween({
               node: ballNode,
-              duration: 0.3, // 0.3초만에 빠르게 이동
+              duration: 0.3, 
               x: targetPlayer.x() + 13,
               y: targetPlayer.y() + 13,
               easing: Konva.Easings.EaseOut,
@@ -647,29 +626,24 @@
       
       currentStepLines.push(lineData);
 
-      // ★ 추가: 실선, T자, 지그재그선 그리기 시 플레이어 자동 이동 로직
       const moveTypes = ['solid', 'screen', 'dribble'];
       if (moveTypes.includes(currentDrawType) && pts.length >= 4) {
         const startX = pts[0];
         const startY = pts[1];
         
-        // 1. 시작점 근처의 플레이어 찾기
         let startingPlayer = null;
-        let minPlayerDist = 40; // 감지 반경
+        let minPlayerDist = 40; 
 
         allDraggables.forEach(obj => {
-          if (obj.id() !== 'ball') { // 공은 플레이어가 아닙
+          if (obj.id() !== 'ball') { 
             const dist = Math.hypot(startX - obj.x(), startY - obj.y());
             if (dist < minPlayerDist) { minPlayerDist = dist; startingPlayer = obj; }
           }
         });
 
-        // 2. 플레이어가 발견되면 선을 따라 이동 애니메이션 실행
         if (startingPlayer) {
-          // 이동 시간 (필요에 따라 조절 가능)
           const playerTweenDuration = 1.0; 
 
-          // 선의 전체 길이 및 각 구간(segment) 정보 계산
           let totalLength = 0;
           const segments = [];
           for (let i = 0; i < pts.length - 2; i += 2) {
@@ -686,7 +660,6 @@
           }
 
           if (totalLength > 0) {
-            // 플레이어 이동 경로 애니메이션 (Konva.Animation 활용)
             const anim = new Konva.Animation((frame) => {
               let progress = frame.time / (playerTweenDuration * 1000); 
               if (progress > 1) progress = 1;
@@ -695,7 +668,6 @@
               let currX = pts[pts.length - 2];
               let currY = pts[pts.length - 1];
 
-              // 현재 진행률(progress)에 맞는 궤적 위의 정확한 좌표(x, y) 찾기
               for (let i = 0; i < segments.length; i++) {
                 const seg = segments[i];
                 if (targetLen >= seg.accum && targetLen <= seg.accum + seg.length) {
@@ -706,7 +678,6 @@
                 }
               }
 
-              // 플레이어 및 공 위치 업데이트
               startingPlayer.x(currX);
               startingPlayer.y(currY);
 
@@ -727,11 +698,9 @@
       isDrawing = false; currentLine = null; currentGroup = null; rawPath = [];
     });
 
-    // --- 데이터 영속성 (JSON 내보내기 / 불러오기) ---
     document.getElementById('btn-export').addEventListener('click', () => {
       if (frames.length === 0) {
         if (!confirm('캡처된 프레임이 없습니다. 현재 상태만 저장하시겠습니까?')) return;
-        // 현재 상태를 첫 번째 프레임으로 저장
         const frameState = { lines: currentStepLines };
         allDraggables.forEach(obj => { frameState[obj.id()] = { x: obj.x(), y: obj.y() }; });
         frames.push(frameState);
@@ -768,7 +737,6 @@
         try {
           const importedData = JSON.parse(e.target.result);
           
-          // 기존 객체 초기화
           playerLayer.destroyChildren();
           drawingLayer.destroyChildren();
           allDraggables = [];
@@ -778,10 +746,8 @@
           ballOwnerId = null;
           currentStepLines = [];
           
-          // 공 재생성
           playerLayer.add(createBasketball(450, 255));
           
-          // 플레이어 재생성
           for(let i=1; i <= importedData.homeTeamCount; i++) {
             homeTeamCount++;
             playerLayer.add(createPlayer(50 + (i * 45), 485, i.toString(), '#e74c3c', 'home_' + i));
@@ -791,10 +757,8 @@
             playerLayer.add(createPlayer(850 - (i * 45), 485, 'X' + i, '#2980b9', 'away_' + i));
           }
 
-          // 프레임 복구
           frames = importedData.frames || [];
           
-          // 첫 번째 프레임으로 상태 복구
           if (frames.length > 0) {
             currentFrameIndex = 0;
             counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
@@ -816,13 +780,11 @@
         } catch (err) {
           alert('잘못된 파일 형식이거나 불러오기에 실패했습니다.');
         }
-        document.getElementById('file-input').value = ""; // input 초기화
+        document.getElementById('file-input').value = ""; 
       };
       reader.readAsText(file);
     });
 
-    
-    // --- ★ 두 손가락 줌(Zoom) & 팬(Pan) 로직 ---
     function getDistance(p1, p2) {
       return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
     }
@@ -841,9 +803,10 @@
       const touch2 = e.evt.touches ? e.evt.touches[1] : null;
 
       if (touch1 && touch2) {
-        e.evt.preventDefault(); // 기본 스크롤 방지
+        e.evt.preventDefault(); 
         
-        // 그리기 중이었다면 취소
+        isPanningOrZooming = true; // ★ 줌/팬 동작 활성화 감지
+
         if (isDrawing) {
           isDrawing = false;
           if (currentLine) currentLine.destroy();
@@ -869,26 +832,21 @@
           lastDist = dist;
         }
 
-        // 확대/축소 기준점 계산
         const pointTo = {
           x: (newCenter.x - stage.x()) / stage.scaleX(),
           y: (newCenter.y - stage.y()) / stage.scaleX(),
         };
 
-        // 스케일 계산
         let scale = stage.scaleX() * (dist / lastDist);
-        // 과도한 축소/확대 제한
         if (scale < 0.3) scale = 0.3;
         if (scale > 5) scale = 5;
 
         stage.scaleX(scale);
         stage.scaleY(scale);
 
-        // 이동(팬) 거리 계산
         const dx = newCenter.x - lastCenter.x;
         const dy = newCenter.y - lastCenter.y;
 
-        // 새로운 위치 적용
         const newPos = {
           x: newCenter.x - pointTo.x * scale + dx,
           y: newCenter.y - pointTo.y * scale + dy,
@@ -903,8 +861,11 @@
     });
 
     stage.on('touchend', function (e) {
-      if (!e.evt.touches || e.evt.touches.length < 3) {
-        isThreeFingerTouched = false;
+      // ★ 터치가 종료되면 상태 초기화
+      if (!e.evt.touches || e.evt.touches.length < 2) {
+        isTwoFingerTouched = false;
+        // 줌/팬 플래그를 아주 짧은 시간 뒤에 해제하여 터치오작동 방지
+        setTimeout(() => { isPanningOrZooming = false; }, 100);
       }
       lastDist = 0;
       lastCenter = null;
