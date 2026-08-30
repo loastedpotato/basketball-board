@@ -7,24 +7,38 @@
  <meta name="apple-mobile-web-app-title" content="농구 전술판">
  <link rel="apple-touch-icon" href="icon-192.png">
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>FIBA 규격 농구 전술판 (공 소유 및 패스 자동화)</title>
   <script src="https://unpkg.com/konva@9.3.14/konva.min.js"></script>
   <style>
-    /* 스마트폰 화면 최적화 적용 */
-    body { margin: 0; padding: 5px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow: hidden; touch-action: none; }
+    /* 스마트폰 완벽 대응을 위한 Flexbox 기반 레이아웃 고정 */
+    html, body { 
+      width: 100%; 
+      height: 100%; 
+      height: 100dvh; /* 모바일 동적 뷰포트 높이 강제 적용 */
+      margin: 0; 
+      padding: 0; 
+      background-color: #f0f0f0; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      font-family: sans-serif; 
+      overflow: hidden; 
+      touch-action: none; 
+    }
     
-    .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
+    .header { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; padding: 10px 0; margin-bottom: 5px; }
+    .header h2 { margin: 0; font-size: 20px; color: #333; }
+    .menu-btn { position: absolute; left: 10px; padding: 6px 12px; font-size: 14px; font-weight: bold; border: 2px solid #333; border-radius: 6px; background-color: #fff; color: #333; cursor: pointer; }
+    .menu-btn.active { background-color: #333; color: #fff; }
+
+    #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; flex-shrink: 0; padding: 0 10px; box-sizing: border-box; }
+    #control-panel.show { display: flex; }
+    
+    .toolbar-group { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
     .mode-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; border: 2px solid #333; border-radius: 6px; background-color: #fff; color: #333; cursor: pointer; transition: all 0.2s ease; }
     .mode-btn.active { background-color: #333; color: #fff; }
-    .draw-tools { display: none; gap: 5px; padding-left: 10px; border-left: 2px dashed #ccc; }
-    .draw-tools.show { display: flex; }
-    .type-btn { padding: 6px 10px; font-size: 13px; border: 1px solid #666; border-radius: 4px; background-color: #fff; cursor: pointer; }
-    .type-btn.active { background-color: #666; color: #fff; }
-    .add-btn-home { border-color: #c0392b; color: #c0392b; }
-    .add-btn-home:hover { background-color: #e74c3c; color: white; }
-    .add-btn-away { border-color: #16a085; color: #2980b9; }
-    .add-btn-away:hover { background-color: #2980b9; color: white; }
+    
     .undo-btn { border-color: #f39c12; color: #e67e22; }
     .undo-btn:hover { background-color: #f39c12; color: white; }
     .anim-panel { background: #e8f8f5; border: 2px solid #1abc9c; }
@@ -32,33 +46,27 @@
     .btn-frame:hover { background-color: #1abc9c; color: white; }
     .btn-play { border-color: #3498db; color: #3498db; }
     .btn-play:hover { background-color: #3498db; color: white; }
-    .frame-counter { font-weight: bold; color: #1abc9c; align-self: center; margin-left: 5px; }
+    .frame-counter { font-weight: bold; color: #1abc9c; align-self: center; margin-left: 5px; font-size: 14px; }
+    .data-panel { background: #fdf2e9; border: 2px solid #e67e22; }
     .btn-export { border-color: #d35400; color: #d35400; }
     .btn-export:hover { background-color: #d35400; color: white; }
     .btn-import { border-color: #e67e22; color: #e67e22; }
     .btn-import:hover { background-color: #e67e22; color: white; }
-    .data-panel { background: #fdf2e9; border: 2px solid #e67e22; }
-    
-    /* 캔버스 크기를 JS 로직에 완벽히 맡기기 위해 강제 100% 해제 */
-    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; display: inline-block; }
-    .board-wrapper { position: relative; margin: 0 auto; display: inline-block; }
-    
-    .header { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; margin-bottom: 10px; }
-    .header h2 { margin: 0; font-size: 20px; color: #333; }
-    .menu-btn { position: absolute; left: 0; padding: 6px 12px; }
-    #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; }
-    #control-panel.show { display: flex; }
   
-    .floating-toolbox { position: fixed; top: 120px; left: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px; touch-action: none; }
-    .fab-main { width: 50px; height: 50px; border-radius: 50%; background-color: #34495e; color: white; font-size: 24px; border: none; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; user-select: none; transition: transform 0.1s; }
+    /* 코트가 들어갈 빈 공간을 자동으로 꽉 채우는 래퍼 */
+    .board-wrapper { flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%; position: relative; overflow: hidden; padding: 5px; box-sizing: border-box; }
+    
+    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; flex-shrink: 0; line-height: 0; }
+
+    .floating-toolbox { position: fixed; top: 120px; left: 15px; z-index: 1000; display: flex; align-items: center; gap: 10px; touch-action: none; }
+    .fab-main { width: 45px; height: 45px; border-radius: 50%; background-color: #34495e; color: white; font-size: 22px; border: none; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; user-select: none; transition: transform 0.1s; }
     .fab-main:active { cursor: grabbing; transform: scale(0.95); }
     .fab-menu { display: flex; gap: 8px; opacity: 0; transform: translateX(-20px); pointer-events: none; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
     .fab-menu.open { opacity: 1; transform: translateX(0); pointer-events: auto; }
-    .fab-item { width: 45px; height: 45px; border-radius: 50%; background-color: #fff; border: 2px solid #34495e; font-size: 20px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; justify-content: center; align-items: center; transition: all 0.2s; user-select: none; }
+    .fab-item { width: 40px; height: 40px; border-radius: 50%; background-color: #fff; border: 2px solid #34495e; font-size: 18px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; justify-content: center; align-items: center; transition: all 0.2s; user-select: none; }
     .fab-item.active { background-color: #34495e; color: white; border-color: #34495e; }
-    .fab-item:hover { transform: translateY(-2px); }
-
-    .overlay-play-btn { position: absolute; top: 15px; right: 15px; z-index: 10; font-size: 20px; background: rgba(255,255,255,0.9); border: 2px solid #3498db; color: #3498db; border-radius: 50%; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.1s; padding-left: 4px; }
+    
+    .overlay-play-btn { position: absolute; top: 15px; right: 15px; z-index: 10; font-size: 18px; background: rgba(255,255,255,0.9); border: 2px solid #3498db; color: #3498db; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); padding-left: 3px; }
     .overlay-play-btn:active { transform: scale(0.95); }
 </style>
 </head>
@@ -89,18 +97,18 @@
     <div class="toolbar-group anim-panel">
       <button id="btn-save-frame" class="mode-btn btn-frame">📸 프레임 캡처</button>
       <button id="btn-play-anim" class="mode-btn btn-play">▶️ 작전 재생</button>
-      <button id="btn-clear-frames" class="mode-btn">🔄 프레임 초기화</button>
-      <span id="frame-counter" class="frame-counter">저장된 프레임: 0개</span>
+      <button id="btn-clear-frames" class="mode-btn">🔄 초기화</button>
+      <span id="frame-counter" class="frame-counter">프레임: 0</span>
     </div>
 
     <div class="toolbar-group data-panel">
-      <button id="btn-export" class="mode-btn btn-export">💾 전술 저장 (JSON)</button>
+      <button id="btn-export" class="mode-btn btn-export">💾 전술 저장</button>
       <button id="btn-import" class="mode-btn btn-import">📂 전술 불러오기</button>
       <input type="file" id="file-input" accept=".json" style="display: none;" />
     </div>
   </div>
   
-  <div class="board-wrapper">
+  <div class="board-wrapper" id="board-wrapper">
     <button id="btn-overlay-play" class="overlay-play-btn" title="작전 재생">▶️</button>
     <div id="tactics-board"></div>
   </div>
@@ -239,7 +247,8 @@
       } else {
         btn.classList.remove('active');
       }
-      setTimeout(resizeCanvas, 50); // 메뉴창 여닫을 때 캔버스 크기 재계산
+      // 메뉴 오픈 애니메이션 종료 후 캔버스 리사이징 강제 호출
+      setTimeout(resizeCanvas, 10); 
     });
 
     for (let i = 1; i <= MAX_PLAYERS; i++) {
@@ -265,7 +274,7 @@
       
       currentFrameIndex = frames.length - 1;
       currentStepLines = []; 
-      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+      counterText.innerText = `프레임: ${frames.length}개 (${currentFrameIndex + 1})`;
       
       const flash = new Konva.Rect({ x: 0, y: 0, width: stage.width() / stage.scaleX(), height: stage.height() / stage.scaleY(), fill: 'white', opacity: 0.5 });
       courtLayer.add(flash); courtLayer.draw();
@@ -299,7 +308,7 @@
         drawingLayer.add(group);
       });
       drawingLayer.draw();
-      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+      counterText.innerText = `프레임: ${frames.length}개 (${currentFrameIndex + 1})`;
     }
 
     function goToPreviousFrame() {
@@ -317,7 +326,7 @@
     document.getElementById('btn-clear-frames').addEventListener('click', () => {
       frames = []; currentStepLines = []; 
       currentFrameIndex = -1;
-      counterText.innerText = `저장된 프레임: 0개`;
+      counterText.innerText = `프레임: 0`;
       drawingLayer.destroyChildren(); drawingLayer.draw();
     });
 
@@ -395,7 +404,7 @@
       if (currentMode === 'move') allDraggables.forEach(obj => obj.draggable(true));
       
       currentFrameIndex = frames.length - 1;
-      counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+      counterText.innerText = `프레임: ${frames.length}개 (${currentFrameIndex + 1})`;
       
       alert('작전 재생이 완료되었습니다.');
     }
@@ -526,7 +535,6 @@
     let isDrawing = false, currentGroup, currentLine, rawPath = [];
     
     stage.on('mousedown touchstart', (e) => {
-      // ★ 세 손가락 터치 프레임 캡처
       if (e.evt.touches && e.evt.touches.length === 3) {
         e.evt.preventDefault();
         
@@ -542,7 +550,6 @@
         return;
       }
 
-      // ★ 두 손가락 다중 터치 제스처 처리
       if (e.evt.touches && e.evt.touches.length === 2) {
         e.evt.preventDefault();
         
@@ -566,7 +573,7 @@
         return;
       }
       
-      if (e.evt.touches && e.evt.touches.length > 1) return; // 두 손가락 이상 그리기 무시
+      if (e.evt.touches && e.evt.touches.length > 1) return; 
       if (currentMode !== 'draw' || isPlaying) return; 
       isDrawing = true; const pos = stage.getRelativePointerPosition();
       currentGroup = new Konva.Group(); drawingLayer.add(currentGroup);
@@ -580,7 +587,7 @@
 
     stage.on('mousemove touchmove', (e) => {
       if (!isDrawing) return; 
-      if (e.evt.touches && e.evt.touches.length > 1) return; // 다중 터치 시 무시
+      if (e.evt.touches && e.evt.touches.length > 1) return; 
       e.evt.preventDefault();
       const pos = stage.getRelativePointerPosition();
       if (currentDrawType === 'dribble') {
@@ -724,7 +731,7 @@
         frames.push(frameState);
         currentStepLines = [];
         currentFrameIndex = 0;
-        counterText.innerText = `저장된 프레임: ${frames.length}개`;
+        counterText.innerText = `프레임: ${frames.length}개`;
       }
       
       const exportData = {
@@ -779,7 +786,7 @@
           
           if (frames.length > 0) {
             currentFrameIndex = 0;
-            counterText.innerText = `저장된 프레임: ${frames.length}개 (현재: ${currentFrameIndex + 1})`;
+            counterText.innerText = `프레임: ${frames.length}개 (${currentFrameIndex + 1})`;
             const firstFrame = frames[0];
             allDraggables.forEach(obj => {
               if (firstFrame[obj.id()]) {
@@ -789,7 +796,7 @@
             });
           } else {
             currentFrameIndex = -1;
-            counterText.innerText = `저장된 프레임: 0개`;
+            counterText.innerText = `프레임: 0개`;
           }
           
           playerLayer.draw();
@@ -894,24 +901,25 @@
     const VIRTUAL_HEIGHT = 510;
     const HALF_COURT_WIDTH = 460; 
 
-    // ★ 스마트폰 절대 잘림 방지 최적화 로직
+    // ★ 모바일 기기의 가변적인 빈 공간을 정확히 측정하여 잘림을 완벽 방지하는 로직
     function resizeCanvas() {
-      // 현재 상단 UI(메뉴, 버튼 등)가 차지하는 실제 높이를 가져와 여유 공간을 계산
-      const headerObj = document.querySelector('.header');
-      const controlPanelObj = document.getElementById('control-panel');
-      const uiHeight = headerObj.offsetHeight + (controlPanelObj.classList.contains('show') ? controlPanelObj.offsetHeight : 0) + 30;
+      const wrapper = document.getElementById('board-wrapper');
+      if (!wrapper) return;
       
-      // 기기 화면 전체 크기에서 UI와 여백을 제외한 순수 가용 공간 산출
-      const availableWidth = window.innerWidth - 20; 
-      const availableHeight = window.innerHeight - uiHeight;
+      // 테두리(4px*2)와 내부 여백 등을 고려하여 순수하게 캔버스가 들어갈 수 있는 최대 공간 계산
+      const availableWidth = wrapper.clientWidth - 15; 
+      const availableHeight = wrapper.clientHeight - 15;
       
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
       const currentVirtualWidth = isHalfCourt ? HALF_COURT_WIDTH : VIRTUAL_WIDTH;
       
-      // 가로 비율과 세로 비율 중 '더 빡빡한(작은) 비율'을 선택하여 무조건 화면 안에 들어오도록 강제
+      // 가로 비율과 세로 비율 중 '더 빡빡한(작은) 비율'을 채택하여 절대 밖으로 나가지 않게 함
       let scaleW = availableWidth / currentVirtualWidth;
       let scaleH = availableHeight / VIRTUAL_HEIGHT;
       let scale = Math.min(scaleW, scaleH);
       
+      // 아이패드처럼 넓은 화면에서는 굳이 확대하지 않도록 1로 제한 (원하시면 삭제 가능)
       if (!isHalfCourt && scale > 1) { scale = 1; }
 
       stage.width(currentVirtualWidth * scale);
@@ -921,8 +929,12 @@
       stage.batchDraw();
     }
 
+    // 윈도우 리사이징 및 스마트폰 화면 회전 시 캔버스 크기 즉각 재계산
     window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
+    
+    // 초기 로딩 시 한 번 실행
+    setTimeout(resizeCanvas, 50);
   </script>
 <script>
   if ('serviceWorker' in navigator) {
