@@ -11,7 +11,7 @@
   <title>FIBA 규격 농구 전술판 (공 소유 및 패스 자동화)</title>
   <script src="https://unpkg.com/konva@9.3.14/konva.min.js"></script>
   <style>
-    /* 스마트폰 화면 최적화 적용 (여백 최소화 및 스크롤 고정) */
+    /* 스마트폰 화면 최적화 적용 */
     body { margin: 0; padding: 5px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow: hidden; touch-action: none; }
     
     .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
@@ -38,8 +38,12 @@
     .btn-import { border-color: #e67e22; color: #e67e22; }
     .btn-import:hover { background-color: #e67e22; color: white; }
     .data-panel { background: #fdf2e9; border: 2px solid #e67e22; }
-    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; width: 100%; max-width: 900px; box-sizing: border-box; }
-    .header { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; margin-bottom: 15px; }
+    
+    /* 캔버스 크기를 JS 로직에 완벽히 맡기기 위해 강제 100% 해제 */
+    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; display: inline-block; }
+    .board-wrapper { position: relative; margin: 0 auto; display: inline-block; }
+    
+    .header { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; margin-bottom: 10px; }
     .header h2 { margin: 0; font-size: 20px; color: #333; }
     .menu-btn { position: absolute; left: 0; padding: 6px 12px; }
     #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; }
@@ -54,7 +58,6 @@
     .fab-item.active { background-color: #34495e; color: white; border-color: #34495e; }
     .fab-item:hover { transform: translateY(-2px); }
 
-    .board-wrapper { position: relative; width: 100%; max-width: 900px; box-sizing: border-box; margin: 0 auto; }
     .overlay-play-btn { position: absolute; top: 15px; right: 15px; z-index: 10; font-size: 20px; background: rgba(255,255,255,0.9); border: 2px solid #3498db; color: #3498db; border-radius: 50%; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.1s; padding-left: 4px; }
     .overlay-play-btn:active { transform: scale(0.95); }
 </style>
@@ -236,6 +239,7 @@
       } else {
         btn.classList.remove('active');
       }
+      setTimeout(resizeCanvas, 50); // 메뉴창 여닫을 때 캔버스 크기 재계산
     });
 
     for (let i = 1; i <= MAX_PLAYERS; i++) {
@@ -890,16 +894,21 @@
     const VIRTUAL_HEIGHT = 510;
     const HALF_COURT_WIDTH = 460; 
 
-    // ★ 스마트폰 가로/세로 최적화 리사이징 함수
+    // ★ 스마트폰 절대 잘림 방지 최적화 로직
     function resizeCanvas() {
-      const container = document.getElementById('tactics-board');
-      const containerWidth = container.offsetWidth; 
+      // 현재 상단 UI(메뉴, 버튼 등)가 차지하는 실제 높이를 가져와 여유 공간을 계산
+      const headerObj = document.querySelector('.header');
+      const controlPanelObj = document.getElementById('control-panel');
+      const uiHeight = headerObj.offsetHeight + (controlPanelObj.classList.contains('show') ? controlPanelObj.offsetHeight : 0) + 30;
       
-      const availableHeight = window.innerHeight - 70; // 상하단 여백 제외 가용 높이
+      // 기기 화면 전체 크기에서 UI와 여백을 제외한 순수 가용 공간 산출
+      const availableWidth = window.innerWidth - 20; 
+      const availableHeight = window.innerHeight - uiHeight;
+      
       const currentVirtualWidth = isHalfCourt ? HALF_COURT_WIDTH : VIRTUAL_WIDTH;
       
-      // 가로 비율과 세로 비율 중 더 작은(타이트한) 비율을 적용하여 잘림 방지
-      let scaleW = containerWidth / currentVirtualWidth;
+      // 가로 비율과 세로 비율 중 '더 빡빡한(작은) 비율'을 선택하여 무조건 화면 안에 들어오도록 강제
+      let scaleW = availableWidth / currentVirtualWidth;
       let scaleH = availableHeight / VIRTUAL_HEIGHT;
       let scale = Math.min(scaleW, scaleH);
       
