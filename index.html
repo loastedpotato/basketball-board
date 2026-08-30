@@ -11,7 +11,9 @@
   <title>FIBA 규격 농구 전술판 (공 소유 및 패스 자동화)</title>
   <script src="https://unpkg.com/konva@9.3.14/konva.min.js"></script>
   <style>
-    body { margin: 0; padding: 20px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+    /* 스마트폰 화면 최적화 적용 (여백 최소화 및 스크롤 고정) */
+    body { margin: 0; padding: 5px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow: hidden; touch-action: none; }
+    
     .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
     .mode-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; border: 2px solid #333; border-radius: 6px; background-color: #fff; color: #333; cursor: pointer; transition: all 0.2s ease; }
     .mode-btn.active { background-color: #333; color: #fff; }
@@ -43,7 +45,6 @@
     #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; }
     #control-panel.show { display: flex; }
   
-    /* 플로팅 툴박스(FAB) 스타일 */
     .floating-toolbox { position: fixed; top: 120px; left: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px; touch-action: none; }
     .fab-main { width: 50px; height: 50px; border-radius: 50%; background-color: #34495e; color: white; font-size: 24px; border: none; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; user-select: none; transition: transform 0.1s; }
     .fab-main:active { cursor: grabbing; transform: scale(0.95); }
@@ -114,12 +115,11 @@
     let currentStepLines = []; 
     let currentFrameIndex = -1;
     
-    // ★ 멀티 터치 제스처 관련 변수
     let isTwoFingerTouched = false; 
     let twoFingerTapCount = 0; 
     let twoFingerTapTimer = null;
     let isPanningOrZooming = false; 
-    let isThreeFingerTouched = false; // 세 손가락 감지 플래그 복구
+    let isThreeFingerTouched = false; 
     
     let ballNode = null; 
     let ballOwnerId = null;
@@ -522,11 +522,10 @@
     let isDrawing = false, currentGroup, currentLine, rawPath = [];
     
     stage.on('mousedown touchstart', (e) => {
-      // ★ 세 손가락 터치 프레임 캡처 (복구됨)
+      // ★ 세 손가락 터치 프레임 캡처
       if (e.evt.touches && e.evt.touches.length === 3) {
         e.evt.preventDefault();
         
-        // 만약 두 손가락 타이머가 작동 중이었다면 오작동 방지를 위해 초기화
         if (twoFingerTapTimer) {
           clearTimeout(twoFingerTapTimer);
           twoFingerTapCount = 0;
@@ -539,7 +538,7 @@
         return;
       }
 
-      // ★ 두 손가락 다중 터치 제스처 처리 (이전/다음 프레임 이동)
+      // ★ 두 손가락 다중 터치 제스처 처리
       if (e.evt.touches && e.evt.touches.length === 2) {
         e.evt.preventDefault();
         
@@ -876,7 +875,6 @@
     });
 
     stage.on('touchend', function (e) {
-      // ★ 터치 종료 시 상태 복구
       if (!e.evt.touches || e.evt.touches.length < 3) {
         isThreeFingerTouched = false;
       }
@@ -892,11 +890,19 @@
     const VIRTUAL_HEIGHT = 510;
     const HALF_COURT_WIDTH = 460; 
 
+    // ★ 스마트폰 가로/세로 최적화 리사이징 함수
     function resizeCanvas() {
       const container = document.getElementById('tactics-board');
       const containerWidth = container.offsetWidth; 
+      
+      const availableHeight = window.innerHeight - 70; // 상하단 여백 제외 가용 높이
       const currentVirtualWidth = isHalfCourt ? HALF_COURT_WIDTH : VIRTUAL_WIDTH;
-      let scale = containerWidth / currentVirtualWidth;
+      
+      // 가로 비율과 세로 비율 중 더 작은(타이트한) 비율을 적용하여 잘림 방지
+      let scaleW = containerWidth / currentVirtualWidth;
+      let scaleH = availableHeight / VIRTUAL_HEIGHT;
+      let scale = Math.min(scaleW, scaleH);
+      
       if (!isHalfCourt && scale > 1) { scale = 1; }
 
       stage.width(currentVirtualWidth * scale);
