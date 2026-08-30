@@ -7,24 +7,37 @@
  <meta name="apple-mobile-web-app-title" content="농구 전술판">
  <link rel="apple-touch-icon" href="icon-192.png">
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>FIBA 규격 농구 전술판 (공 소유 및 패스 자동화)</title>
   <script src="https://unpkg.com/konva@9.3.14/konva.min.js"></script>
   <style>
-    /* 스마트폰 화면 최적화 적용 */
-    body { margin: 0; padding: 5px; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow: hidden; touch-action: none; }
+    html, body { 
+      position: fixed; 
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%; height: 100%; 
+      margin: 0; padding: 0; 
+      background-color: #f0f0f0; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      font-family: sans-serif; 
+      overflow: hidden; 
+      touch-action: none; 
+      user-select: none;
+      -webkit-user-select: none;
+    }
     
-    .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 100%; box-sizing: border-box; }
+    .header { width: 100%; max-width: 900px; display: flex; align-items: center; justify-content: center; position: relative; padding: 10px 0; flex-shrink: 0; }
+    .header h2 { margin: 0; font-size: 20px; color: #333; }
+    .menu-btn { position: absolute; left: 10px; padding: 6px 12px; }
+    
+    #control-panel { flex-shrink: 0; width: 100%; display: none; flex-direction: column; align-items: center; }
+    #control-panel.show { display: flex; }
+
+    .toolbar-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 5px; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 900px; width: 95%; box-sizing: border-box; }
     .mode-btn { padding: 8px 12px; font-size: 14px; font-weight: bold; border: 2px solid #333; border-radius: 6px; background-color: #fff; color: #333; cursor: pointer; transition: all 0.2s ease; }
     .mode-btn.active { background-color: #333; color: #fff; }
-    .draw-tools { display: none; gap: 5px; padding-left: 10px; border-left: 2px dashed #ccc; }
-    .draw-tools.show { display: flex; }
-    .type-btn { padding: 6px 10px; font-size: 13px; border: 1px solid #666; border-radius: 4px; background-color: #fff; cursor: pointer; }
-    .type-btn.active { background-color: #666; color: #fff; }
-    .add-btn-home { border-color: #c0392b; color: #c0392b; }
-    .add-btn-home:hover { background-color: #e74c3c; color: white; }
-    .add-btn-away { border-color: #16a085; color: #2980b9; }
-    .add-btn-away:hover { background-color: #2980b9; color: white; }
+    
     .undo-btn { border-color: #f39c12; color: #e67e22; }
     .undo-btn:hover { background-color: #f39c12; color: white; }
     .anim-panel { background: #e8f8f5; border: 2px solid #1abc9c; }
@@ -39,14 +52,17 @@
     .btn-import:hover { background-color: #e67e22; color: white; }
     .data-panel { background: #fdf2e9; border: 2px solid #e67e22; }
     
-    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; display: inline-block; }
-    .board-wrapper { position: relative; margin: 0 auto; display: inline-block; }
+    .board-wrapper { 
+      position: relative;
+      width: 100%;
+      flex-grow: 1; 
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
     
-    .header { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 900px; position: relative; margin-bottom: 10px; }
-    .header h2 { margin: 0; font-size: 20px; color: #333; }
-    .menu-btn { position: absolute; left: 0; padding: 6px 12px; }
-    #control-panel { display: none; width: 100%; flex-direction: column; align-items: center; }
-    #control-panel.show { display: flex; }
+    #tactics-board { border: 4px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background-color: #fff; touch-action: none; }
   
     .floating-toolbox { position: fixed; top: 120px; left: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px; touch-action: none; }
     .fab-main { width: 50px; height: 50px; border-radius: 50%; background-color: #34495e; color: white; font-size: 24px; border: none; cursor: grab; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; user-select: none; transition: transform 0.1s; }
@@ -55,8 +71,7 @@
     .fab-menu.open { opacity: 1; transform: translateX(0); pointer-events: auto; }
     .fab-item { width: 45px; height: 45px; border-radius: 50%; background-color: #fff; border: 2px solid #34495e; font-size: 20px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; justify-content: center; align-items: center; transition: all 0.2s; user-select: none; }
     .fab-item.active { background-color: #34495e; color: white; border-color: #34495e; }
-    .fab-item:hover { transform: translateY(-2px); }
-
+    
     .overlay-play-btn { position: absolute; top: 15px; right: 15px; z-index: 10; font-size: 20px; background: rgba(255,255,255,0.9); border: 2px solid #3498db; color: #3498db; border-radius: 50%; width: 45px; height: 45px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.1s; padding-left: 4px; }
     .overlay-play-btn:active { transform: scale(0.95); }
 </style>
@@ -80,7 +95,7 @@
 
   <div id="control-panel">
     <div class="toolbar-group">
-      <!-- ★ 기본 상태가 하프 코트이므로 초기 텍스트를 '풀 코트'로 변경하고 active 클래스 추가 -->
+      <!-- ★ 기본값이 하프 코트이므로 버튼 텍스트를 '풀 코트'로 설정하고 active 클래스 적용 -->
       <button id="btn-half-court" class="mode-btn active">🏀 풀 코트</button>
       <button id="btn-grid" class="mode-btn">📏 가이드라인</button>
       <button id="btn-undo" class="mode-btn undo-btn">↩️ 선 지우기</button>
@@ -126,9 +141,6 @@
     
     let ballNode = null; 
     let ballOwnerId = null;
-
-    // ★ 하프 코트 모드를 기본값(true)으로 변경
-    let isHalfCourt = true; 
 
     const stage = new Konva.Stage({ container: 'tactics-board', width: 900, height: 510 });
     const courtLayer = new Konva.Layer();
@@ -214,8 +226,9 @@
       ballNode = ballGroup; 
       return ballGroup;
     }
-    // 공을 중앙선 위치(x: 450, y: 255)로 변경 
-    playerLayer.add(createBasketball(450, 255));
+
+    // ★ 공 초기 위치 중앙선 배치 (중앙선 좌표 X=450에서 반지름만큼 뺀 435 배치)
+    playerLayer.add(createBasketball(435, 255));
 
     function createPlayer(x, y, label, color, id) {
       const playerGroup = new Konva.Group({ id: id, x: x, y: y, draggable: (currentMode === 'move') });
@@ -243,17 +256,19 @@
       } else {
         btn.classList.remove('active');
       }
-      setTimeout(resizeCanvas, 50); 
+      setTimeout(resizeCanvas, 100); 
     });
 
-    // ★ 양 팀 선수들 중앙선 근처 세로로 5명 정렬
+    // ★ 양팀 선수 초기 위치 변경 (공 기준으로 위/아래, 중앙선에 딱 붙게 배치)
     for (let i = 1; i <= MAX_PLAYERS; i++) {
       homeTeamCount++;
-      playerLayer.add(createPlayer(390, 100 + ((i - 1) * 75), homeTeamCount.toString(), '#e74c3c', 'home_' + homeTeamCount)); 
+      // 홈 팀(우리팀): 공 기준 아래쪽으로 간격을 두고 세로 나열
+      playerLayer.add(createPlayer(435, 255 + (i * 38), homeTeamCount.toString(), '#e74c3c', 'home_' + homeTeamCount)); 
     }
     for (let i = 1; i <= MAX_PLAYERS; i++) {
       awayTeamCount++;
-      playerLayer.add(createPlayer(430, 100 + ((i - 1) * 75), 'X' + awayTeamCount, '#2980b9', 'away_' + awayTeamCount)); 
+      // 어웨이 팀(상대팀): 공 기준 위쪽으로 간격을 두고 세로 나열
+      playerLayer.add(createPlayer(435, 255 - (i * 38), 'X' + awayTeamCount, '#2980b9', 'away_' + awayTeamCount)); 
     }
     playerLayer.draw();
 
@@ -407,6 +422,9 @@
     document.getElementById('btn-play-anim').addEventListener('click', playAnimation);
     document.getElementById('btn-overlay-play').addEventListener('click', playAnimation);
 
+    // ★ 초기 모드를 하프 코트로 설정
+    let isHalfCourt = true;
+    
     document.getElementById('btn-half-court').addEventListener('click', (e) => {
       isHalfCourt = !isHalfCourt;
       if (isHalfCourt) { e.target.innerText = '🏀 풀 코트'; e.target.classList.add('active'); } 
@@ -743,6 +761,7 @@
       downloadAnchorNode.remove();
     });
 
+    // ★ 파일 불러오기 시에도 플레이어 초기 위치를 동일한 로직(중앙선 배치)으로 생성하도록 수정
     document.getElementById('btn-import').addEventListener('click', () => {
       document.getElementById('file-input').click();
     });
@@ -765,15 +784,15 @@
           ballOwnerId = null;
           currentStepLines = [];
           
-          playerLayer.add(createBasketball(450, 255));
+          playerLayer.add(createBasketball(435, 255));
           
           for(let i=1; i <= importedData.homeTeamCount; i++) {
             homeTeamCount++;
-            playerLayer.add(createPlayer(390, 100 + ((i - 1) * 75), i.toString(), '#e74c3c', 'home_' + i));
+            playerLayer.add(createPlayer(435, 255 + (i * 38), i.toString(), '#e74c3c', 'home_' + i));
           }
           for(let i=1; i <= importedData.awayTeamCount; i++) {
             awayTeamCount++;
-            playerLayer.add(createPlayer(430, 100 + ((i - 1) * 75), 'X' + i, '#2980b9', 'away_' + i));
+            playerLayer.add(createPlayer(435, 255 - (i * 38), 'X' + i, '#2980b9', 'away_' + i));
           }
 
           frames = importedData.frames || [];
@@ -896,13 +915,20 @@
     const HALF_COURT_WIDTH = 460; 
 
     function resizeCanvas() {
-      const container = document.getElementById('tactics-board');
-      const containerWidth = container.offsetWidth; 
+      const header = document.querySelector('.header');
+      const panel = document.getElementById('control-panel');
       
-      const availableHeight = window.innerHeight - 70; 
+      let uiHeight = header.offsetHeight;
+      if (panel.classList.contains('show')) {
+        uiHeight += panel.offsetHeight;
+      }
+
+      const availableWidth = window.innerWidth - 10; 
+      const availableHeight = window.innerHeight - uiHeight - 20;
+      
       const currentVirtualWidth = isHalfCourt ? HALF_COURT_WIDTH : VIRTUAL_WIDTH;
       
-      let scaleW = containerWidth / currentVirtualWidth;
+      let scaleW = availableWidth / currentVirtualWidth;
       let scaleH = availableHeight / VIRTUAL_HEIGHT;
       let scale = Math.min(scaleW, scaleH);
       
@@ -916,7 +942,7 @@
     }
 
     window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    setTimeout(resizeCanvas, 100); 
   </script>
 <script>
   if ('serviceWorker' in navigator) {
